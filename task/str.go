@@ -27,6 +27,17 @@ type DanmuContent struct {
 	Color         string
 	SendTimeStamp string
 	DanmuPool     string
+	UserHash      string
 	DataBaseID    string
 	Content       string
+}
+
+type I struct {
+	Chatserver string `xml:"chatserver"`
+	Chatid     string `xml:"chatid"`
+	D          []D    `xml:"d"`
+}
+type D struct {
+	P    string `xml:"p,attr"`
+	Text string `xml:",chardata"`
 }

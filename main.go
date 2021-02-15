@@ -14,7 +14,7 @@ import (
 )
 
 var config conf.TrackerConf
-var cwd, _ = os.Getwd()
+var userHome, _ = os.UserHomeDir()
 var infoChan chan string
 var errChan chan error
 
@@ -24,12 +24,12 @@ func init() {
 		ServerPort: "8000",
 	}
 	b, _ := json.Marshal(tmpConf)
-	fp, err := os.Open(cwd + PathDiv() + "conf.json")
+	fp, err := os.Open(userHome + PathDiv() + ".danmutracker_conf.json")
 	defer fp.Close()
 	if !os.IsExist(err) {
 		config = tmpConf
 		fp.Close()
-		fp, err = os.Create(cwd + PathDiv() + "conf.json")
+		fp, err = os.Create(userHome + PathDiv() + ".danmutracker_conf.json")
 		fp.Write(b)
 	} else {
 		b, _ = ioutil.ReadAll(fp)
@@ -48,6 +48,7 @@ func main() {
 	glg.Info("Starting HTTP server...")
 	go httpserver.StartHTTPServer(config.ServerPort, infoChan, errChan)
 	glg.Info("Succeed to start DanmuTracker!")
+
 	for {
 		select {
 		case info := <-infoChan:
@@ -58,6 +59,7 @@ func main() {
 	}
 }
 
+// PathDiv ...
 func PathDiv() string {
 	if runtime.GOOS == "windows" {
 		return "\\"

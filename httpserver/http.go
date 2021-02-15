@@ -2,11 +2,13 @@ package httpserver
 
 import "net/http"
 
+// Handle ...
 type Handle struct {
 	InfoChan chan string
 	ErrChan  chan error
 }
 
+// StartHTTPServer ...
 func StartHTTPServer(port string, infoChan chan string, errChan chan error) (err error) {
 	handle := &Handle{
 		InfoChan: infoChan,

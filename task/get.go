@@ -1,54 +1,27 @@
 package task
 
 import (
+	"compress/flate"
 	"encoding/json"
+	"encoding/xml"
+	"fmt"
 	"io/ioutil"
-	"math/rand"
 	"net/http"
-	"os"
-	"os/exec"
 	"runtime"
 	"strconv"
 	"strings"
 )
 
+// DanmuTask ...
 type DanmuTask struct {
-	PyScript string
 }
 
-var pyScript = `
-from parsel import Selector
-
-import requests
-
-
-def get(url):
-    headers = {
-        "Accept": "*/*",
-        "Accept-Language": "zh-CN,zh;q=0.8,en-US;q=0.5,en;q=0.3",
-        "User-Agent": "Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:55.0) Gecko/20100101 Firefox/55.0"
-    }
-    body = requests.get(url, headers=headers).content
-    xbody = Selector(text=str(body, encoding='utf-8'))
-    lists = xbody.xpath("//d")
-    count = xbody.xpath("//maxlimit/text()").extract_first()
-    for li in lists:
-        content = li.xpath("./text()").extract_first()
-        par = li.xpath("./@p").extract_first()
-        print(content, "&&&", par)
-
-
-if __name__ == '__main__':
-    url = "https://comment.bilibili.com/$CID$.xml"
-    get(url)
-`
-
+// NewDanmuTask ...
 func NewDanmuTask() *DanmuTask {
-	return &DanmuTask{
-		PyScript: pyScript,
-	}
+	return &DanmuTask{}
 }
 
+// GetCID ...
 func (d *DanmuTask) GetCID(bid string) (cid []string, err error) {
 	playInfo := PlayInfo{}
 	resp, err := http.Get("https://api.bilibili.com/x/player/pagelist?bvid=" + bid + "os&jsonp=jsonp")
@@ -63,54 +36,27 @@ func (d *DanmuTask) GetCID(bid string) (cid []string, err error) {
 	return
 }
 
+// GetDanmu ...
 func (d *DanmuTask) GetDanmu(cid string) (danmu []DanmuContent, err error) {
-	var path string
 
-	if runtime.GOOS == "windows" {
-		path, err = exec.LookPath("python3.exe")
-	} else {
-		path, err = exec.LookPath("python3")
-	}
-	if err != nil {
-		return
-	}
-	cwd, _ := os.Getwd()
-	rad := cwd + PathDiv() + strconv.FormatInt(rand.Int63n(1000000), 10) + ".py"
-	// fmt.Println("Exec file: " + rad)
-	tmpPythonFileContent := strings.ReplaceAll(d.PyScript, "$CID$", cid)
-	fp, err := os.Create(rad)
-	fp.WriteString(tmpPythonFileContent)
-	cmd := exec.Command(path, rad)
-	b, err := RunCommand(cmd)
-	danmu, err = SplitDanmuContentString(string(b))
+	danmu, err = SplitDanmuContentString(d.DoGet(cid))
 	if err != nil {
 		return
 	}
 
-	defer func() {
-		fp.Close()
-		os.Remove(rad)
-	}()
 	return
 }
 
-func RunCommand(exec *exec.Cmd) (b []byte, err error) {
-	return exec.CombinedOutput()
-}
+// SplitDanmuContentString ...
+func SplitDanmuContentString(i I) (danmu []DanmuContent, err error) {
 
-func SplitDanmuContentString(s string) (danmu []DanmuContent, err error) {
-	tmpSlice := strings.Split(s, "\n")
 	danmu = make([]DanmuContent, 0)
 
-	for _, v := range tmpSlice {
-		tmpSlice1 := strings.Split(v, " &&& ")
-		if len(tmpSlice1) == 1 {
-			// fmt.Println(v)
-			continue
-		}
+	for _, v := range i.D {
+
 		tmpContentSlice := make([]string, 0)
-		tmpContentSlice = append(tmpContentSlice, tmpSlice1[0])
-		tmpContentSlice = append(tmpContentSlice, strings.Split(tmpSlice1[1], ",")...)
+		tmpContentSlice = append(tmpContentSlice, v.Text)
+		tmpContentSlice = append(tmpContentSlice, strings.Split(v.P, ",")...)
 
 		tmpDanmu := DanmuContent{
 			Content:       tmpContentSlice[0],
@@ -120,16 +66,53 @@ func SplitDanmuContentString(s string) (danmu []DanmuContent, err error) {
 			Color:         tmpContentSlice[4],
 			SendTimeStamp: tmpContentSlice[5],
 			DanmuPool:     tmpContentSlice[6],
-			DataBaseID:    tmpContentSlice[7],
+			UserHash:      tmpContentSlice[7],
+			DataBaseID:    tmpContentSlice[8],
 		}
 		danmu = append(danmu, tmpDanmu)
 	}
 	return
 }
 
+// PathDiv ...
 func PathDiv() string {
 	if runtime.GOOS == "windows" {
 		return "\\"
 	}
 	return "/"
+}
+
+func (t *DanmuTask) DoGet(cid string) I {
+	url := "https://comment.bilibili.com/%CID%.xml"
+	url = strings.ReplaceAll(url, "%CID%", cid)
+	client := http.Client{}
+	httpReq, _ := http.NewRequest("GET", url, nil)
+
+	httpReq.Header.Set("Accept-Encoding", "gzip,deflate,br")
+	httpReq.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:87.0) Gecko/20100101 Firefox/87.0")
+	httpReq.Header.Set("Accept-Language", "zh-CN,zh;q=0.5")
+
+	defer func() {
+		if err := recover(); err != nil {
+			fmt.Println(err)
+		}
+	}()
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		panic(err)
+	}
+
+	//Flate data
+	i := flate.NewReader(resp.Body)
+	b, err := ioutil.ReadAll(i)
+	if err != nil {
+		panic(err)
+	}
+
+	tmp := I{}
+	if err = xml.Unmarshal(b, &tmp); err != nil {
+		panic(err)
+	}
+
+	return tmp
 }

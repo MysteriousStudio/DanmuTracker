@@ -7,11 +7,14 @@ import (
 	"github.com/MysteriousStudio/DanmuTracker/task"
 )
 
+// HandleGet ...
 type HandleGet struct {
 	*Handle
 }
 
+// ServeHTTP ...
 func (h *HandleGet) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	chans := NewChans(h.InfoChan, h.ErrChan)
 	query := r.URL.Query()
 	bid := query.Get("bid")
